@@ -1,0 +1,35 @@
+SELECT OMS_ID,PRODUCT_NAME, dept_nbr, SUB_DEPT, CLASS_NBR,DFM, OH_QTY,ONLINE_DISPOSITION,CURRENT_PERM_PRICE, CURRENT_LIST_PRICE,INVOICE_COST, CURRENT_IMU, SITE_MAP, IDM_MAP, LOWEST_COMPETITOR_PRICE, LOWEST_COMPETITOR_CPI, LOWEST_COMPETITOR_NAME, R12_ECOMM_GD, R12_ECOMM_UNITS, CURRENT_PROMO_STATUS, FUTURE_PROMO_STATUS,store_mode_price, mode_price_store_count, active_store_mode_price, active_store_count, total_store_count, history_date, new_cost,promo_type, promo_funding, credit_memo_amount_per_unit, new_eff_end_date
+FROM `analytics-online-assort-thd.sandbox.pq_table_with_shared_items` 
+
+LEFT JOIN (SELECT CAST(omsid AS INT64) OMS_ID, sku_stat_cd, store_mode_price, mode_price_store_count, active_store_mode_price, active_store_count, total_store_count FROM `analytics-online-assort-thd.sandbox.PACDASH_w_eff_MAP`) USING (OMS_ID)
+left join (SELECT cast(OMS_ID as int64) as OMS_ID
+, max(HISTORY_DATE) as HISTORY_DATE
+FROM `analytics-online-assort-thd.sandbox.tkj_amazon_test_items_phase_three`
+group by all) using (OMS_ID)
+
+LEFT JOIN (
+  SELECT *
+  FROM (
+    SELECT
+      SAFE_CAST(omsid AS INT64) AS OMS_ID,
+      NEW_COST, 
+      PROMO_FUNDING,
+      CREDIT_MEMO_AMOUNT_PER_UNIT, 
+      PROMO_TYPE,
+      NEW_EFF_END_DATE,
+      ROW_NUMBER() OVER (PARTITION BY SAFE_CAST(omsid AS INT64) ORDER BY NEW_EFF_END_DATE DESC) AS rn
+    FROM `analytics-idmdc-thd.prism.line_items_complete_promo`
+  )
+  WHERE rn = 1
+) USING (OMS_ID)
+WHERE CURRENT_LIST_PRICE < INVOICE_COST
+AND ((LOWEST_COMPETITOR_NAME <> 'Amazon' and LOWEST_COMPETITOR_CPI < 1 ) OR LOWEST_COMPETITOR_CPI IS NULL)
+AND (CURRENT_PERM_PRICE < active_store_mode_price OR active_store_mode_price is NULL)
+
+
+AND CURRENT_PROMO_STATUS IS NULL
+and PRODUCT_NAME not like '%Sample%'
+and PRODUCT_NAME not  like '%SAMPLE%'
+and product_name not like '%sample%'
+and DEPT_NBR in ("021", "025", "026", "030")
+Order by R12_ECOMM_GD DESC
